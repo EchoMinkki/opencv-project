@@ -1,56 +1,48 @@
 <template>
   <div>
-    <input type="file" @change="handleFileUpload" accept="image/*" />
-    
-    <!-- 显示上传的原始图像 -->
-    <img v-if="originalImage" :src="originalImage" ref="inputImage" @load="processImage" alt="Original Image" />
-    
-    <!-- 输出处理后的图像 -->
-    <canvas ref="outputCanvas"></canvas>
+    <input type="file" @change="handleFileChange" />
+    <button @click="loadImage">Load Image</button>
+    <canvas ref="canvas"></canvas>
   </div>
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, nextTick } from 'vue';
-import { denoiseImage } from './components/image_util/denoise'; // 假设 denoiseImage 方法存在
+import { defineComponent, markRaw, ref } from 'vue'
+import * as cv from '@techstark/opencv-js'
+import { fileToMat } from './components/image_util' // 确保路径正确
 
 export default defineComponent({
-  name: 'App',
+  name: 'ImageLoader',
   setup() {
-    const originalImage = ref<string | null>(null);
-    const inputImage = ref<HTMLImageElement | null>(null);
-    const outputCanvas = ref<HTMLCanvasElement | null>(null);
+    const canvas = ref<HTMLCanvasElement | null>(null)
+    const mat = ref<cv.Mat | null>(null)
 
-    const handleFileUpload = (event: Event) => {
-      const file = (event.target as HTMLInputElement).files?.[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = () => {
-          originalImage.value = reader.result as string;
-        };
-        reader.readAsDataURL(file);
+    const handleFileChange = (event: Event) => {
+      const files = (event.target as HTMLInputElement).files
+      if (files) {
+        fileToMat(files[0])
+          .then((matResult) => {
+            mat.value = markRaw(matResult)
+          })
+          .catch((error) => {
+            console.error('Error loading image:', error)
+          })
       }
-    };
+    }
 
-    const processImage = async () => {
-      if (inputImage.value && outputCanvas.value) {
-        try {
-          await denoiseImage(inputImage.value, outputCanvas.value);
-        } catch (err) {
-          console.error('Error during image denoising:', err);
-        }
+    const loadImage = () => {
+      if (mat.value && canvas.value) {
+        cv.imshow(canvas.value, mat.value)
       }
-    };
+    }
 
     return {
-      originalImage,
-      inputImage,
-      outputCanvas,
-      handleFileUpload,
-      processImage,
-    };
-  },
-});
+      canvas,
+      handleFileChange,
+      loadImage
+    }
+  }
+})
 </script>
 
 <style scoped>
