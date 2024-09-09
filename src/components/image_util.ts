@@ -9,16 +9,22 @@ export async function fileToMat(file: File): Promise<cv.Mat> {
     const reader = new FileReader();
 
     reader.onload = async (e) => {
-      try {
         const buffer = e.target?.result as ArrayBuffer;
         const image = await Jimp.fromBuffer(buffer);
         var src = cv.matFromImageData(image.bitmap);
         resolve(src);
-      } catch (err) {
-        reject(new Error(`Error processing image: ${err.message}`));
-      }
     }
 
     reader.readAsArrayBuffer(file);
   });
+}
+
+// strength是高斯模糊的核大小
+export function applyGaussinBlur(pic:cv.Mat, strength:cv.int):cv.Mat{
+  const kernelSize=Math.sqrt(strength)*2+1;
+  const kernel=new cv.Size(kernelSize,kernelSize);
+  const sigma=strength/10;
+  var result=pic.clone()
+  cv.GaussianBlur(result,result,kernel,sigma);
+  return result;
 }
