@@ -34,7 +34,7 @@
           <button>下载图像</button>
         </div>
         <div class="zoom-controls">
-          <label for="zoom-slider">缩放比例：{{ formattedZoomValue }}</label>
+          <label for="zoom-slider">缩放比例：{{ zoomValue }}</label>
           <input
             id="zoom-slider"
             type="range"
@@ -296,6 +296,12 @@ export default defineComponent({
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault()
       const delta = event.deltaY ? -event.deltaY / 100 : 0
+
+      // 确保当前 zoomValue 是一个有效数字
+      if (typeof zoomValue.value !== 'number' || isNaN(zoomValue.value)) {
+        zoomValue.value = 1 // 如果当前值无效，重置为默认值
+      }
+
       let newZoom = zoomValue.value + delta * 0.25
       newZoom = Math.round(newZoom * 4) / 4 // 确保缩放步长为0.25
       newZoom = Math.max(0.25, Math.min(newZoom, 2)) // 限制缩放范围
@@ -427,8 +433,11 @@ export default defineComponent({
   cursor: pointer;
 }
 /*√*/
+.zoom-controls {
+  width: 200px;
+}
 .zoom-controls input {
-  width: 35%;
+  width: 200px;
 }
 
 /*√*/
