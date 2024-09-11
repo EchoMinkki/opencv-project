@@ -1,6 +1,8 @@
 import * as cv from '@techstark/opencv-js'
 import { Jimp, JimpMime } from 'jimp'
 
+const url = 'http://127.0.0.1:8000/'
+
 export async function fileToMat(file: File): Promise<cv.Mat> {
   if (typeof cv === 'undefined') {
     throw new Error('OpenCV.js not loaded!')
@@ -37,6 +39,35 @@ export function applyGaussinBlur(pic: cv.Mat, strength: number): cv.Mat {
   return result
 }
 
+async function fetchImage(uri: string, pic: cv.Mat): Promise<cv.Mat> {
+  const formData = new FormData()
+  const picBlob = await matToBlob(pic)
+  formData.append('file', picBlob)
+
+  const response = await fetch(url + uri, { method: 'POST', body: formData })
+  if (!response.ok) {
+    throw new Error('Network response was not ok')
+  }
+  const data = await response.json()
+  if (!data.image) {
+    throw new Error('json have no image')
+  }
+  return base64ToMat(data.image)
+}
+
+export function changeBrightnessAndContrast(
+  pic: cv.Mat,
+  brightness: number,
+  contrast: number
+): cv.Mat {
+  const alpha = 1 + contrast / 100.0
+  const beta = brightness
+
+  const result = pic.clone()
+  cv.convertScaleAbs(result, result, alpha, beta)
+  return result
+}
+
 async function matToBlob(pic: cv.Mat): Promise<Blob> {
   const picData: cv.ImageData = {
     data: new Uint8ClampedArray(pic.data),
@@ -49,26 +80,34 @@ async function matToBlob(pic: cv.Mat): Promise<Blob> {
 }
 
 async function base64ToMat(pic: string): Promise<cv.Mat> {
-  console.log(pic)
-  const picData = pic.split(',')[1]
-  const buffer = Buffer.from(picData, 'base64')
+  const picBinary = atob(pic)
+  const bytes = new Uint8Array(picBinary.length)
+  for (let i = 0; i < picBinary.length; i++) {
+    bytes[i] = picBinary.charCodeAt(i)
+  }
 
-  const picJimp = await Jimp.read(buffer)
+  const picJimp = await Jimp.read(bytes.buffer)
   return cv.matFromImageData(picJimp.bitmap)
 }
 
-async function fetchImage(uri: string, pic: cv.Mat): Promise<cv.Mat> {
-  const formData = new FormData()
-  const picBlob = await matToBlob(pic)
-  formData.append('file', picBlob)
-
-  const response = await fetch(uri, { method: 'POST', body: formData })
-  if (!response.ok) {
-    throw new Error('Network response was not ok')
-  }
-  const data = await response.json()
-  if (!data.image) {
-    throw new Error('json have no image')
-  }
-  return base64ToMat(data.image)
+/**
+ * 调用风格化迁移函数的异步接口
+ * @param pic cv.Mat类型的图片输入
+ * @param model_name 传递给接口的参数，决定了使用的模型，可选值为
+ * "candy", "starry_night", "the_wave", "the_scream", "mosaic", "la_muse", "feathers", "ubnie", "composition_vii"
+ */
+export async function styleTransfer(
+  pic: cv.Mat,
+  model_name:
+    | 'candy'
+    | 'starry_night'
+    | 'the_wave'
+    | 'the_scream'
+    | 'mosaic'
+    | 'la_muse'
+    | 'feathers'
+    | 'ubnie'
+    | 'composition_vii'
+) {
+  return fetchImage('style_transfer/?model_name=' + model_name, pic)
 }
