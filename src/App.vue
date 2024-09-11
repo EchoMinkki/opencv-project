@@ -6,8 +6,8 @@
         <span>图片处理与风格化系统</span>
       </div>
       <div class="actions">
-        <!-- <button @click="reset">重置</button>
-        <button @click="undo" :disabled="!canUndo">撤销</button> -->
+        <button @click="reset">重置</button>
+        <!-- <button @click="undo" :disabled="!canUndo">撤销</button> -->
       </div>
     </div>
 
@@ -208,6 +208,28 @@ export default defineComponent({
         }
       }
     }
+    //重置操作
+    const reset = () => {
+      // 重置缩放比例和图像位置
+      zoomValue.value = 1
+      imagePosition.x = 0
+      imagePosition.y = 0
+
+      // // 可能需要重置其他状态，如裁剪状态等
+      // if (isCropping.value) {
+      //   isCropping.value = false
+      // }
+
+      // 如果有其他图像处理操作的状态，也应该在这里重置
+
+      // 重新加载和绘制原始图像
+      if (originalMat.value) {
+        if (!imageCanvas.value) return
+        mat.value = originalMat.value.clone()
+        cv.imshow(imageCanvas.value, mat.value)
+        drawImageCanvasOnMainCanvas()
+      }
+    }
 
     //图像拖拽
     const startDrag = (event: MouseEvent) => {
@@ -374,6 +396,9 @@ export default defineComponent({
 
       handleFileChange,
       loadImage,
+
+      //操作重置
+      reset,
 
       //图像缩放
       zoomValue,
