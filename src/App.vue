@@ -7,26 +7,89 @@
       </div>
       <div class="actions">
         <button @click="reset">重置</button>
-        <!-- <button @click="undo" :disabled="!canUndo">撤销</button> -->
+        <button @click="undo" :disabled="!canUndo">撤销</button>
       </div>
     </div>
 
     <!-- 主体部分 -->
     <div class="main-content">
-      <!-- 左侧图片显示区域 -->
+      <!-- 左侧图片色彩空间调整区域 -->
+      <div class="slider-container">
+        <div class="slider-bar">
+          <label for="brightness">亮度</label>
+          <span class="min-value">-100</span>
+          <input
+            type="range"
+            id="brightness"
+            min="-100"
+            max="100"
+            v-model.number="brightness"
+            @input="adjustBrightnessContrast"
+          />
+          <span class="max-value">100</span>
+          <span class="current-value">{{ brightness }}</span>
+        </div>
+        <div class="slider-bar">
+          <label for="contrast">对比度</label>
+          <span class="min-value">-100</span>
+          <input
+            type="range"
+            id="brightness"
+            min="-100"
+            max="100"
+            v-model.number="contrast"
+            @input="adjustBrightnessContrast"
+          />
+          <span class="max-value">100</span>
+          <span class="current-value">{{ contrast }}</span>
+        </div>
+        <div class="slider-bar">
+          <label for="saturation">饱和度</label>
+          <span class="min-value">-100</span>
+          <input
+            type="range"
+            id="saturation"
+            min="-100"
+            max="100"
+            v-model.number="saturation"
+            @input="adjustSaturation"
+          />
+          <span class="max-value">100</span>
+          <span class="current-value">{{ saturation }}</span>
+        </div>
+        <div class="slider-bar">
+          <label for="sharpening">锐化</label>
+          <span class="min-value">-100</span>
+          <input
+            type="range"
+            id="sharpening"
+            min="-100"
+            max="100"
+            v-model.number="sharpening"
+            @input="adjustSharpening"
+          />
+          <span class="max-value">100</span>
+          <span class="current-value">{{ sharpening }}</span>
+        </div>
+        <!-- <div class="adjustments-confirm-buttons">
+          <button @click="confirmAdjustments">√</button>
+          <button @click="cancelAdjustments">×</button>
+        </div> -->
+      </div>
+      <!-- 中间图片显示区域 -->
       <div class="image-container">
         <div class="image-box" ref="imageBox">
           <div class="canvas-container">
             <canvas id="mainCanvas" ref="mainCanvas"></canvas>
             <canvas id="imageCanvas" ref="imageCanvas" style="display: none"></canvas>
-            <!-- <canvas
+            <canvas
               id="overlayCanvas"
               ref="overlayCanvas"
               @mousedown="startCrop"
               @mousemove="drawCrop"
               @mouseup="endCrop"
             >
-            </canvas> -->
+            </canvas>
           </div>
         </div>
         <div class="image-actions">
@@ -57,8 +120,8 @@
         <div class="tool-section">
           <h3>基本图像处理</h3>
           <button @click="enableCropMode">裁切</button>
-          <button>旋转</button>
-          <button>去噪</button>
+          <button @click="rotateImage">旋转</button>
+          <!-- <button>去噪</button> -->
           <button @click="applyBlur">模糊</button>
           <div class="blur">
             <label for="blurRange">Blur Strength: {{ blurStrength }}</label>
@@ -72,19 +135,34 @@
             />
           </div>
         </div>
-        <!-- 图像色彩空间改变工具 -->
-        <!-- <div class="slideBar">
-          <canvas ref="color-space-canvas"></canvas> -->
-        <!-- 亮度 -->
-        <!-- <div class="color-space-bar">
-            <label for="brightness">亮度</label>
-            <input type="range" id="brightness" min="-100" max="100" v-model="brightness" @input="adjustImage">
-          </div> -->
-        <!-- 对比度 -->
-        <!-- <div class="color-space-bar">
-            <label for="contrast">对比度</label>
-            <input type="range" id="contrast" min="-100" max="100" v-model="contrast" @input="adjustImage">
+        <!-- 图像调整工具 -->
+        <!-- <div class="tool-section">
+          <h3>图像调整</h3>
+          <button @click="selectAdjustment('brightness')">亮度</button>
+          <button @click="selectAdjustment('contrast')">对比度</button>
+          <button @click="selectAdjustment('saturation')">饱和度</button>
+          <button @click="selectAdjustment('sharpening')">锐化</button> -->
+
+        <!-- 动态显示滑动条 -->
+        <!-- <div v-if="selectedAdjustment" class="slider-bar">
+            <label :for="selectedAdjustment">{{ adjustmentLabel }}</label>
+            <span class="min-value">-100</span>
+            <input
+              type="range"
+              :id="selectedAdjustment"
+              min="-100"
+              max="100"
+              v-model="currentValue"
+              @input="applyAdjustment"
+            />
+            <span class="max-value">100</span>
+            <span class="current-value">{{ currentValue }}</span>
           </div>
+        </div>
+
+        <div class="adjustments-confirm-buttons">
+          <button @click="confirmAdjustments">√</button>
+          <button @click="cancelAdjustments">×</button>
         </div> -->
 
         <div class="tool-section">
@@ -97,13 +175,27 @@
         </div>
 
         <div class="tool-section">
-          <h3>图片风格化</h3>
-          <button>冷暖滤镜</button>
+          <h3>滤镜</h3>
           <button>素描滤镜</button>
           <button>卡通滤镜</button>
           <button>凸透镜滤镜</button>
           <button>漩涡滤镜</button>
-          <button>风格迁移</button>
+        </div>
+
+        <div class="tool-section">
+          <h3>图片风格迁移</h3>
+          <label for="modelSelect">选择风格</label>
+          <select id="modelSelect" name="model" @change="handleModelChange">
+            <option value="candy">缤纷糖果</option>
+            <option value="starry_night">星夜</option>
+            <option value="the_wave">巨浪</option>
+            <option value="the_scream">呐喊</option>
+            <option value="mosaic">马赛克</option>
+            <option value="la_muse">缪斯女神</option>
+            <option value="feathers">羽毛</option>
+            <option value="udnie">尤德尼梦境</option>
+            <option value="composition_vii">构图七</option>
+          </select>
         </div>
 
         <button id="generate">生成图片</button>
@@ -115,7 +207,13 @@
 <script lang="ts">
 import { defineComponent, markRaw, ref, reactive, watch, onMounted, onUnmounted } from 'vue'
 import * as cv from '@techstark/opencv-js'
-import { applyGaussinBlur, fileToMat } from './components/image_util'
+import {
+  applyGaussinBlur,
+  changeBrightnessAndContrast,
+  fileToMat,
+  styleTransfer
+} from './components/image_util'
+import { builtinModules } from 'module'
 
 export default defineComponent({
   name: 'ImageLoader',
@@ -123,9 +221,16 @@ export default defineComponent({
     const overlayCanvas = ref<HTMLCanvasElement | null>(null)
     const imageCanvas = ref<HTMLCanvasElement | null>(null)
     const mainCanvas = ref<HTMLCanvasElement | null>(null)
-    const mat = ref<cv.Mat | null>(null)
-    const originalMat = ref<cv.Mat | null>(null) // 保存原图
-    const previewMat = ref<cv.Mat | null>(null) // 用于裁剪预览
+    const mat = ref<cv.Mat | null>(null) //当前状态
+    const originalMat = ref<cv.Mat | null>(null) // 保存原图，用于重置
+    const previewMat = ref<cv.Mat | null>(null) // 用于暂时预览
+
+    // 图像历史记录栈
+    const historyStack = ref<cv.Mat[]>([]) // 存储历史记录
+    const canUndo = ref<boolean>(false) // 是否可以撤销
+
+    //图像旋转
+    const rotationAngle = ref<number>(0)
 
     //图像缩放
     const baseScale = ref<number>(1)
@@ -136,6 +241,12 @@ export default defineComponent({
     const dragStart = reactive({ x: 0, y: 0 })
     const imagePosition = reactive({ x: 0, y: 0 })
 
+    //图像色彩空间变化
+    const brightness = ref<number>(0)
+    const contrast = ref<number>(0)
+    const saturation = ref<number>(0)
+    const sharpening = ref<number>(0)
+
     //图像裁剪
     const isCropping = ref<boolean>(false)
     const cropStart = reactive({ x: 0, y: 0 })
@@ -144,14 +255,16 @@ export default defineComponent({
     //高斯模糊
     const blurStrength = ref<number>(10) // 初始模糊强度
 
+    //图像基础操作
     const handleFileChange = (event: Event) => {
       console.log('1111')
       const files = (event.target as HTMLInputElement).files
       if (files) {
         fileToMat(files[0])
           .then((matResult) => {
-            originalMat.value = markRaw(matResult.clone()) // 保存原图
+            originalMat.value = markRaw(matResult.clone()) // 保存原图，用于重置
             mat.value = markRaw(matResult.clone())
+            zoomValue.value = 1 // 重置缩放比例为1
             loadImage(mat.value, imageCanvas.value)
           })
           .catch((error) => {
@@ -160,12 +273,45 @@ export default defineComponent({
       }
     }
 
+    // const handleStyleChange = () => {
+    //   if (mat.value) {
+    //     styleTransfer(mat.value, 'candy').then((matResult) => {
+    //       mat.value = markRaw(matResult.clone())
+    //       loadImage(mat.value, imageCanvas.value)
+    //     })
+    //   }
+    // }
+
+    //图像风格迁移
+    const handleModelChange = (event: Event) => {
+      const selectedStyle = (event.target as HTMLSelectElement).value as
+        | 'candy'
+        | 'starry_night'
+        | 'the_wave'
+        | 'the_scream'
+        | 'mosaic'
+        | 'la_muse'
+        | 'feathers'
+        | 'udnie'
+        | 'composition_vii'
+      console.log('选择的风格是:', selectedStyle) // 打印选择的风格名称
+      if (mat.value) {
+        styleTransfer(mat.value, selectedStyle)
+          .then((matResult) => {
+            mat.value = markRaw(matResult.clone())
+            loadImage(mat.value, imageCanvas.value)
+          })
+          .catch((error) => {
+            console.error('风格迁移出错:', error)
+          })
+      }
+    }
+
     const loadImage = (mat: cv.Mat | null, canvas: HTMLCanvasElement | null) => {
       if (!mainCanvas.value) return
       if (mat && canvas) {
         cv.imshow(canvas, mat)
-        zoomValue.value = 1 // 重置缩放比例为1
-        drawImageCanvasOnMainCanvas() // 使用新的缩放比例更新画布
+        drawImageCanvasOnMainCanvas()
       }
     }
 
@@ -215,6 +361,10 @@ export default defineComponent({
       imagePosition.x = 0
       imagePosition.y = 0
 
+      brightness.value = 0
+      contrast.value = 0
+      saturation.value = 0
+      blurStrength.value = 0
       // // 可能需要重置其他状态，如裁剪状态等
       // if (isCropping.value) {
       //   isCropping.value = false
@@ -225,9 +375,39 @@ export default defineComponent({
       // 重新加载和绘制原始图像
       if (originalMat.value) {
         if (!imageCanvas.value) return
-        mat.value = originalMat.value.clone()
+        mat.value = markRaw(originalMat.value.clone())
         cv.imshow(imageCanvas.value, mat.value)
         drawImageCanvasOnMainCanvas()
+      }
+    }
+    //撤销操作
+    const MAX_HISTORY_LENGTH = 20
+
+    // 保存历史记录
+    const saveHistory = () => {
+      // if (mat.value) {
+      //   console.log('保存历史记录')
+      //   if (historyStack.value.length >= MAX_HISTORY_LENGTH) {
+      //     historyStack.value.shift() // 当超过最大历史记录数时，移除最早的记录
+      //   }
+      //   historyStack.value.push(mat.value.clone()) // 保存当前图像状态
+      //   canUndo.value = historyStack.value.length > 0 // 更新撤销按钮状态
+      // }
+    }
+
+    const undo = () => {
+      if (historyStack.value.length > 0) {
+        console.log('应用撤销', historyStack.value.length)
+        const previousMat = historyStack.value.pop() // 取出上一步的图像状态
+        if (previousMat && imageCanvas.value) {
+          console.log('准备更新当前图像状态', historyStack.value.length)
+          mat.value = markRaw(previousMat.clone()) // 更新当前图像状态
+          console.log('完成更新当前图像状态', historyStack.value.length)
+          cv.imshow(imageCanvas.value, mat.value) // 显示更新后的图像
+          drawImageCanvasOnMainCanvas() // 重新渲染图像
+        }
+        console.log('完成撤销', historyStack.value.length)
+        canUndo.value = historyStack.value.length > 0 // 更新撤销按钮状态
       }
     }
 
@@ -272,6 +452,50 @@ export default defineComponent({
       canvasContainer.removeEventListener('mouseleave', endDrag)
     })
 
+    const confirmAdjustments = () => {
+      //TODO
+      return
+    }
+    //图像旋转
+    const rotateImage = () => {
+      if (!mat.value || !imageCanvas.value) return
+
+      saveHistory() // 旋转前保存当前状态
+      console.log('开始旋转')
+      // 旋转图像
+      const rotatedMat = new cv.Mat()
+      cv.rotate(mat.value, rotatedMat, cv.ROTATE_90_CLOCKWISE)
+
+      // 更新当前图像矩阵
+      mat.value = markRaw(rotatedMat.clone())
+      rotationAngle.value = (rotationAngle.value + 90) % 360 // 更新旋转角度
+
+      // 更新画布上的图像
+      loadImage(mat.value, imageCanvas.value)
+      console.log('完成旋转')
+    }
+
+    //图像色彩空间调整、
+    const adjustBrightnessContrast = () => {
+      console.log('进入亮度对比度调整')
+      if (originalMat.value) {
+        console.log('应用亮度对比度调整')
+        console.log(typeof brightness.value, brightness.value)
+        console.log(typeof contrast.value, contrast.value)
+
+        mat.value = markRaw(
+          changeBrightnessAndContrast(originalMat.value.clone(), brightness.value, contrast.value)
+        )
+        loadImage(mat.value, imageCanvas.value)
+        console.log('完成亮度对比度调整')
+      }
+    }
+    const adjustSaturation = () => {
+      return
+    }
+    const adjustSharpening = () => {
+      return
+    }
     //图像裁剪（已弃用）
     const enableCropMode = () => {
       isCropping.value = true
@@ -381,10 +605,11 @@ export default defineComponent({
     })
     //高斯模糊
     const applyBlur = () => {
-      if (originalMat.value) {
+      if (mat.value) {
+        // saveHistory() // 在应用模糊之前保存当前状态
         console.log('应用高斯模糊')
-        mat.value = markRaw(applyGaussinBlur(originalMat.value.clone(), blurStrength.value))
-        loadImage(mat.value, imageCanvas.value)
+        previewMat.value = markRaw(applyGaussinBlur(mat.value.clone(), blurStrength.value))
+        loadImage(previewMat.value, imageCanvas.value)
       }
     }
 
@@ -400,6 +625,11 @@ export default defineComponent({
       //操作重置
       reset,
 
+      //操作撤销
+      canUndo,
+      saveHistory,
+      undo,
+
       //图像缩放
       zoomValue,
 
@@ -408,6 +638,18 @@ export default defineComponent({
       dragStart,
       imagePosition,
 
+      //图像色彩空间变化
+      brightness,
+      contrast,
+      saturation,
+      sharpening,
+      adjustBrightnessContrast,
+      adjustSaturation,
+      adjustSharpening,
+
+      //图像旋转
+      rotationAngle,
+      rotateImage,
       //图像裁剪（已弃用）
       enableCropMode,
       startCrop,
@@ -419,7 +661,10 @@ export default defineComponent({
 
       //高斯模糊
       applyBlur,
-      blurStrength
+      blurStrength,
+
+      //风格迁移
+      handleModelChange
     }
   }
 })
@@ -467,6 +712,68 @@ export default defineComponent({
 .main-content {
   display: flex;
   margin-top: 20px;
+}
+
+/* Slider container styles */
+.slider-container {
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  margin-right: 20px; /* Ensure it does not touch the image container */
+  border-right: 2px solid #ccc; /* Visually separate from the image area */
+  background-color: #f9f9f9; /* Light background for the sliders */
+}
+
+/* Individual slider bar styles */
+.slider-bar {
+  margin-bottom: 20px; /* Space out individual sliders */
+  position: relative;
+}
+
+.slider-bar label {
+  display: block; /* Make the label take the full width */
+  margin-bottom: 5px; /* Space between the label and the slider */
+  color: #333; /* Dark color for text for better readability */
+  font-size: 14px; /* Slightly larger font size for readability */
+}
+.min-value,
+.max-value,
+.current-value {
+  position: absolute;
+  font-size: 12px;
+}
+
+.min-value {
+  left: 0;
+  top: 20px;
+}
+
+.max-value {
+  right: 0;
+  top: 20px;
+}
+
+.current-value {
+  left: 50%;
+  top: 3px;
+  transform: translateX(-50%);
+}
+
+.slider-bar input[type='range'] {
+  width: 100%; /* Full width sliders */
+  cursor: pointer; /* Pointer cursor on hover */
+}
+
+.adjustments-confirm-buttons {
+  text-align: center;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  margin-left: 10px;
+}
+.adjustments-confirm-buttons button {
+  margin-right: 10px;
+  cursor: pointer;
 }
 
 .image-container {
