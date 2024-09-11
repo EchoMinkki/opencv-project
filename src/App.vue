@@ -113,7 +113,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, markRaw, ref, reactive, watch, onMounted, computed } from 'vue'
+import { defineComponent, markRaw, ref, reactive, watch, onMounted, onUnmounted } from 'vue'
 import * as cv from '@techstark/opencv-js'
 import { applyGaussinBlur, fileToMat } from './components/image_util'
 
@@ -130,9 +130,11 @@ export default defineComponent({
     //图像缩放
     const baseScale = ref<number>(1)
     const zoomValue = ref<number>(1)
-    const formattedZoomValue = computed(() => {
-      return zoomValue.value.toFixed(2)
-    })
+
+    //图像拖拽
+    const isDragging = ref(false)
+    const dragStart = reactive({ x: 0, y: 0 })
+    const imagePosition = reactive({ x: 0, y: 0 })
 
     //图像裁剪
     const isCropping = ref<boolean>(false)
@@ -142,7 +144,6 @@ export default defineComponent({
     //高斯模糊
     const blurStrength = ref<number>(10) // 初始模糊强度
 
-    //1
     const handleFileChange = (event: Event) => {
       console.log('1111')
       const files = (event.target as HTMLInputElement).files
@@ -159,7 +160,6 @@ export default defineComponent({
       }
     }
 
-    //1
     const loadImage = (mat: cv.Mat | null, canvas: HTMLCanvasElement | null) => {
       if (!mainCanvas.value) return
       if (mat && canvas) {
@@ -169,7 +169,7 @@ export default defineComponent({
       }
     }
 
-    // 绘制函数1
+    //主要绘制函数
     const drawImageCanvasOnMainCanvas = () => {
       if (mainCanvas.value && imageCanvas.value) {
         const mainCtx = mainCanvas.value.getContext('2d')
@@ -187,8 +187,8 @@ export default defineComponent({
           const scaledWidth = imageCanvas.value.width * scale
           const scaledHeight = imageCanvas.value.height * scale
 
-          const x = (mainCanvas.value.width - scaledWidth) / 2
-          const y = (mainCanvas.value.height - scaledHeight) / 2
+          const x = (mainCanvas.value.width - scaledWidth) / 2 + imagePosition.x
+          const y = (mainCanvas.value.height - scaledHeight) / 2 + imagePosition.y
 
           mainCtx.clearRect(0, 0, mainCanvas.value.width, mainCanvas.value.height)
           mainCtx.imageSmoothingEnabled = true
@@ -209,7 +209,48 @@ export default defineComponent({
       }
     }
 
-    //图像裁剪
+    //图像拖拽
+    const startDrag = (event: MouseEvent) => {
+      if (mainCanvas.value) {
+        isDragging.value = true
+        dragStart.x = event.clientX - imagePosition.x
+        dragStart.y = event.clientY - imagePosition.y
+        mainCanvas.value.style.cursor = 'move' // 设置拖拽时的光标样式
+      }
+    }
+
+    const doDrag = (event: MouseEvent) => {
+      if (isDragging.value) {
+        imagePosition.x = event.clientX - dragStart.x
+        imagePosition.y = event.clientY - dragStart.y
+        drawImageCanvasOnMainCanvas() // 重新绘制图像到新位置
+      }
+    }
+
+    const endDrag = () => {
+      if (mainCanvas.value) {
+        isDragging.value = false
+        mainCanvas.value.style.cursor = 'default' // 恢复光标到默认样式
+      }
+    }
+
+    onMounted(() => {
+      const canvasContainer = document.querySelector('.canvas-container') as HTMLElement
+      canvasContainer.addEventListener('mousedown', startDrag)
+      canvasContainer.addEventListener('mousemove', doDrag)
+      canvasContainer.addEventListener('mouseup', endDrag)
+      canvasContainer.addEventListener('mouseleave', endDrag)
+    })
+
+    onUnmounted(() => {
+      const canvasContainer = document.querySelector('.canvas-container') as HTMLElement
+      canvasContainer.removeEventListener('mousedown', startDrag)
+      canvasContainer.removeEventListener('mousemove', doDrag)
+      canvasContainer.removeEventListener('mouseup', endDrag)
+      canvasContainer.removeEventListener('mouseleave', endDrag)
+    })
+
+    //图像裁剪（已弃用）
     const enableCropMode = () => {
       isCropping.value = true
     }
@@ -326,14 +367,23 @@ export default defineComponent({
     }
 
     return {
+      //基础数据
       mainCanvas, //1
       imageCanvas, //1
       overlayCanvas, //1
-      zoomValue,
-      formattedZoomValue,
+
       handleFileChange,
       loadImage,
 
+      //图像缩放
+      zoomValue,
+
+      //图像拖拽
+      isDragging,
+      dragStart,
+      imagePosition,
+
+      //图像裁剪（已弃用）
       enableCropMode,
       startCrop,
       drawCrop,
@@ -341,6 +391,8 @@ export default defineComponent({
       confirmCrop,
       cancelCrop,
       isCropping,
+
+      //高斯模糊
       applyBlur,
       blurStrength
     }
@@ -472,7 +524,7 @@ export default defineComponent({
 button {
   border-radius: 10px;
 }
-.crop-box {
+/*.crop-box {
   border: 2px dashed #00f;
   position: absolute;
 }
@@ -487,7 +539,7 @@ button {
 .crop-controls button {
   margin: 0 10px;
   font-size: 24px;
-}
+}*/
 #generate {
   background-color: #28a745;
   color: white;
@@ -511,7 +563,6 @@ canvas {
   left: 0;
   width: 100%;
   height: 100%;
-  cursor: crosshair;
 }
 
 input[type='range'] {
