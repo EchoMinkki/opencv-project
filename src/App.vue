@@ -128,6 +128,7 @@ export default defineComponent({
     const previewMat = ref<cv.Mat | null>(null) // 用于裁剪预览
 
     //图像缩放
+    const baseScale = ref<number>(1)
     const zoomValue = ref<number>(1)
     const formattedZoomValue = computed(() => {
       return zoomValue.value.toFixed(2)
@@ -160,9 +161,11 @@ export default defineComponent({
 
     //1
     const loadImage = (mat: cv.Mat | null, canvas: HTMLCanvasElement | null) => {
+      if (!mainCanvas.value) return
       if (mat && canvas) {
         cv.imshow(canvas, mat)
-        drawImageCanvasOnMainCanvas()
+        zoomValue.value = 1 // 重置缩放比例为1
+        drawImageCanvasOnMainCanvas() // 使用新的缩放比例更新画布
       }
     }
 
@@ -171,28 +174,26 @@ export default defineComponent({
       if (mainCanvas.value && imageCanvas.value) {
         const mainCtx = mainCanvas.value.getContext('2d')
         if (mainCtx) {
-          // 确保画布尺寸与显示尺寸一致
           mainCanvas.value.width = mainCanvas.value.clientWidth
           mainCanvas.value.height = mainCanvas.value.clientHeight
 
-          // 计算最适合的缩放比例
-          const scale = Math.min(
-            mainCanvas.value.width / imageCanvas.value.width,
-            mainCanvas.value.height / imageCanvas.value.height
-          )
+          // 计算基础缩放比例
+          const scaleX = mainCanvas.value.width / imageCanvas.value.width
+          const scaleY = mainCanvas.value.height / imageCanvas.value.height
+          baseScale.value = Math.min(scaleX, scaleY)
 
-          // 计算图像居中时的起始坐标
-          const x = (mainCanvas.value.width - scale * imageCanvas.value.width) / 2
-          const y = (mainCanvas.value.height - scale * imageCanvas.value.height) / 2
+          //计算和zoomValue合并后的缩放比例
+          const scale = baseScale.value * zoomValue.value
+          const scaledWidth = imageCanvas.value.width * scale
+          const scaledHeight = imageCanvas.value.height * scale
 
-          // 清除画布
+          const x = (mainCanvas.value.width - scaledWidth) / 2
+          const y = (mainCanvas.value.height - scaledHeight) / 2
+
           mainCtx.clearRect(0, 0, mainCanvas.value.width, mainCanvas.value.height)
-
-          // 设置图像平滑属性
           mainCtx.imageSmoothingEnabled = true
           mainCtx.imageSmoothingQuality = 'high'
 
-          // 绘制图像
           mainCtx.drawImage(
             imageCanvas.value,
             0,
@@ -201,8 +202,8 @@ export default defineComponent({
             imageCanvas.value.height,
             x,
             y,
-            imageCanvas.value.width * scale,
-            imageCanvas.value.height * scale
+            scaledWidth,
+            scaledHeight
           )
         }
       }
@@ -291,41 +292,13 @@ export default defineComponent({
       ctx.clearRect(0, 0, overlayCanvas.value.width, overlayCanvas.value.height) // 清除裁剪框
       isCropping.value = false // 重置裁剪状态
     }
-    //图像缩放
-    const updateCanvas = () => {
-      if (mainCanvas.value && imageCanvas.value) {
-        const mainCtx = mainCanvas.value.getContext('2d')
-        if (mainCtx) {
-          mainCanvas.value.width = mainCanvas.value.clientWidth
-          mainCanvas.value.height = mainCanvas.value.clientHeight
-
-          const scale = zoomValue.value
-          const x = (mainCanvas.value.width - scale * imageCanvas.value.width) / 2
-          const y = (mainCanvas.value.height - scale * imageCanvas.value.height) / 2
-
-          mainCtx.clearRect(0, 0, mainCanvas.value.width, mainCanvas.value.height)
-          mainCtx.imageSmoothingEnabled = true
-          mainCtx.imageSmoothingQuality = 'high'
-
-          mainCtx.drawImage(
-            imageCanvas.value,
-            0,
-            0,
-            imageCanvas.value.width,
-            imageCanvas.value.height,
-            x,
-            y,
-            imageCanvas.value.width * scale,
-            imageCanvas.value.height * scale
-          )
-        }
-      }
-    }
 
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault()
       const delta = event.deltaY ? -event.deltaY / 100 : 0
-      const newZoom = Math.min(Math.max(0.25, zoomValue.value + delta * 0.25), 2)
+      let newZoom = zoomValue.value + delta * 0.25
+      newZoom = Math.round(newZoom * 4) / 4 // 确保缩放步长为0.25
+      newZoom = Math.max(0.25, Math.min(newZoom, 2)) // 限制缩放范围
       zoomValue.value = newZoom
     }
 
@@ -335,7 +308,7 @@ export default defineComponent({
     })
 
     watch(zoomValue, () => {
-      updateCanvas()
+      drawImageCanvasOnMainCanvas()
     })
     //高斯模糊
     const applyBlur = () => {
