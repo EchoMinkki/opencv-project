@@ -191,7 +191,8 @@ import {
   changeBrightnessAndContrast,
   changeSaturation,
   fileToMat,
-  styleTransfer
+  styleTransfer,
+  crop
 } from './components/image_util'
 
 export default defineComponent({
@@ -237,6 +238,7 @@ export default defineComponent({
 
     //图像裁剪
     const isCropping = ref<boolean>(false)
+    const isDrawing = ref<boolean>(false)
     const cropStart = reactive({ x: 0, y: 0 })
     const cropEnd = reactive({ x: 0, y: 0 })
 
@@ -245,7 +247,7 @@ export default defineComponent({
 
     //图像基础操作
     const handleFileChange = (event: Event) => {
-      console.log('1111')
+      console.log('上传图片成功')
       const files = (event.target as HTMLInputElement).files
       if (files) {
         fileToMat(files[0])
@@ -426,7 +428,7 @@ export default defineComponent({
 
     //图像拖拽
     const startDrag = (event: MouseEvent) => {
-      if (mainCanvas.value) {
+      if (mainCanvas.value && !isCropping.value) {
         isDragging.value = true
         dragStart.x = event.clientX - imagePosition.x
         dragStart.y = event.clientY - imagePosition.y
@@ -483,7 +485,7 @@ export default defineComponent({
       console.log('完成旋转')
     }
 
-    //图像色彩空间调整、
+    //图像色彩空间调整
     const adjustBrightnessContrast = () => {
       console.log('进入亮度对比度调整')
       if (mat.value) {
@@ -517,91 +519,9 @@ export default defineComponent({
       }
       return
     }
-    //图像裁剪（已弃用）
-    const enableCropMode = () => {
-      isCropping.value = true
-    }
-
-    const startCrop = (event: MouseEvent) => {
-      if (!isCropping.value || !overlayCanvas.value) return
-      const canvasRect = overlayCanvas.value.getBoundingClientRect()
-      // 设置起点，确保不会出现负数
-      cropStart.x = event.clientX - canvasRect.left
-      cropStart.y = event.clientY - canvasRect.top
-      console.log('起点', cropStart.x, cropStart.y)
-    }
-
-    const drawCrop = (event: MouseEvent) => {
-      if (!isCropping.value || !overlayCanvas.value || (cropStart.x === 0 && cropStart.y === 0))
-        return
-      const ctx = overlayCanvas.value.getContext('2d')
-      if (!ctx) return
-
-      const canvasRect = overlayCanvas.value.getBoundingClientRect()
-      // 动态更新终点
-      cropEnd.x = event.clientX - canvasRect.left
-      cropEnd.y = event.clientY - canvasRect.top
-
-      // 清除之前的绘制
-      ctx.clearRect(0, 0, overlayCanvas.value.width, overlayCanvas.value.height)
-
-      // 计算矩形的实际起点和尺寸
-      const x = Math.min(cropStart.x, cropEnd.x)
-      const y = Math.min(cropStart.y, cropEnd.y)
-      const width = Math.abs(cropEnd.x - cropStart.x)
-      const height = Math.abs(cropEnd.y - cropStart.y)
-
-      // 绘制矩形
-      ctx.beginPath()
-      ctx.rect(x, y, width, height)
-      ctx.strokeStyle = 'red'
-      ctx.stroke()
-      console.log('矩形长宽信息', width, height)
-    }
-
-    const endCrop = () => {
-      if (!isCropping.value) return
-      console.log('endCrop')
-      isCropping.value = false
-      const rect = new cv.Rect(
-        cropStart.x,
-        cropStart.y,
-        cropEnd.x - cropStart.x,
-        cropEnd.y - cropStart.y
-      )
-      if (!originalMat.value) return
-      previewMat.value = originalMat.value.roi(rect)
-      if (!overlayCanvas.value) return
-      cv.imshow(overlayCanvas.value, previewMat.value)
-    }
-    const confirmCrop = () => {
-      if (previewMat.value) {
-        console.log('confirmCrop')
-        mat.value = previewMat.value.clone() // 确认裁剪，更新mat
-        if (!mainCanvas.value) return
-        cv.imshow(mainCanvas.value, mat.value) // 显示更新后的图像
-        console.log('Update image')
-      }
-
-      if (!overlayCanvas.value) return
-      const ctx = overlayCanvas.value.getContext('2d')
-      if (!ctx) return
-      ctx.clearRect(0, 0, overlayCanvas.value.width, overlayCanvas.value.height) // 清除裁剪框
-      isCropping.value = false // 重置裁剪状态
-    }
-
-    const cancelCrop = () => {
-      if (!mainCanvas.value || !mat.value) return
-      cv.imshow(mainCanvas.value, mat.value) // 显示原始未裁剪的图像
-
-      if (!overlayCanvas.value) return
-      const ctx = overlayCanvas.value.getContext('2d')
-      if (!ctx) return
-      ctx.clearRect(0, 0, overlayCanvas.value.width, overlayCanvas.value.height) // 清除裁剪框
-      isCropping.value = false // 重置裁剪状态
-    }
 
     const handleWheel = (event: WheelEvent) => {
+      if (isCropping.value) return
       event.preventDefault()
       const delta = event.deltaY ? -event.deltaY / 100 : 0
 
@@ -634,6 +554,115 @@ export default defineComponent({
       }
     }
 
+    //图像裁剪
+    const adjustCanvasForDPR = (canvas: HTMLCanvasElement) => {
+      const dpr = window.devicePixelRatio || 1
+      const rect = canvas.getBoundingClientRect()
+      canvas.width = rect.width * dpr
+      canvas.height = rect.height * dpr
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        ctx.scale(dpr, dpr)
+      }
+    }
+
+    const getCanvasCoordinates = (event: MouseEvent, canvas: HTMLCanvasElement) => {
+      const rect = canvas.getBoundingClientRect()
+      const dpr = window.devicePixelRatio || 1
+      const x = (event.clientX - rect.left) * (canvas.width / rect.width)
+      const y = (event.clientY - rect.top) * (canvas.height / rect.height)
+      return { x: x / dpr, y: y / dpr }
+    }
+
+    // 在 mounted 生命周期中调用
+    onMounted(() => {
+      if (mainCanvas.value) adjustCanvasForDPR(mainCanvas.value)
+      if (overlayCanvas.value) adjustCanvasForDPR(overlayCanvas.value)
+    })
+    const enableCropMode = () => {
+      isCropping.value = true
+    }
+
+    const startCrop = (event: MouseEvent) => {
+      if (isCropping.value && overlayCanvas.value) {
+        const rect = overlayCanvas.value.getBoundingClientRect()
+        cropStart.x = event.clientX - rect.left
+        cropStart.y = event.clientY - rect.top
+        cropEnd.x = cropStart.x
+        cropEnd.y = cropStart.y
+        console.log('开始图片裁切')
+        isDrawing.value = true
+      }
+    }
+
+    const drawCrop = (event: MouseEvent) => {
+      if (isCropping.value && overlayCanvas.value) {
+        const rect = overlayCanvas.value.getBoundingClientRect()
+        console.log(event.clientX, event.clientY, rect)
+        cropEnd.x = event.clientX - rect.left
+        cropEnd.y = event.clientY - rect.top
+
+        const ctx = overlayCanvas.value.getContext('2d')
+        if (ctx && isDrawing.value) {
+          ctx.clearRect(0, 0, overlayCanvas.value.width, overlayCanvas.value.height)
+          ctx.strokeStyle = 'red'
+          ctx.lineWidth = 2
+          console.log(cropStart.x, cropStart.y, cropEnd.x - cropStart.x, cropEnd.y - cropStart.y)
+          ctx.strokeRect(cropStart.x, cropStart.y, cropEnd.x - cropStart.x, cropEnd.y - cropStart.y)
+          //ctx.strokeRect(0, 88, 100, 100)
+          console.log('绘制裁剪矩形框')
+        }
+      }
+    }
+
+    const endCrop = () => {
+      if (isCropping.value && mat.value) {
+        isDrawing.value = false
+        // 生成裁剪预览图
+        console.log('开始调用crop函数', cropStart, cropEnd)
+        previewMat.value = markRaw(crop(mat.value, cropStart, cropEnd))
+        console.log('完成调用crop函数')
+        if (previewMat.value && imageCanvas.value) {
+          console.log('imshow前')
+          cv.imshow(imageCanvas.value, previewMat.value)
+          console.log('imshow后')
+        }
+      }
+    }
+    const confirmCrop = () => {
+      if (previewMat.value) {
+        console.log('进入confirmCrop')
+        mat.value = markRaw(previewMat.value.clone())
+        loadImage(mat.value, imageCanvas.value)
+        console.log('完成loadImage,confirmCrop')
+        cancelCrop() // 完成裁剪后退出裁剪模式
+      }
+    }
+
+    const cancelCrop = () => {
+      isCropping.value = false
+      previewMat.value = null
+      if (overlayCanvas.value) {
+        const ctx = overlayCanvas.value.getContext('2d')
+        if (ctx) {
+          ctx.clearRect(0, 0, overlayCanvas.value.width, overlayCanvas.value.height)
+        }
+      }
+    }
+    // 监听键盘事件，支持“Enter”键确认裁剪
+    const handleKeyPress = (event: KeyboardEvent) => {
+      if (event.key === 'Enter' && isCropping.value) {
+        confirmCrop()
+      }
+    }
+
+    onMounted(() => {
+      window.addEventListener('keydown', handleKeyPress)
+    })
+
+    onUnmounted(() => {
+      window.removeEventListener('keydown', handleKeyPress)
+    })
     //生成图片
     const generateImage = () => {
       if (previewMat.value) {
@@ -680,13 +709,13 @@ export default defineComponent({
       rotationAngle,
       rotateImage,
       //图像裁剪（已弃用）
+      isCropping,
       enableCropMode,
       startCrop,
       drawCrop,
       endCrop,
       confirmCrop,
       cancelCrop,
-      isCropping,
 
       //高斯模糊
       applyBlur,
