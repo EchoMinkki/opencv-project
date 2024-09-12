@@ -16,7 +16,7 @@
       <!-- 左侧图片色彩空间调整区域 -->
       <div class="slider-container">
         <div class="slider-bar">
-          <label for="brightness">亮度</label>
+          <label for="brightness">亮度:{{ brightness }}</label>
           <span class="min-value">-100</span>
           <input
             type="range"
@@ -25,12 +25,12 @@
             max="100"
             v-model.number="brightness"
             @input="adjustBrightnessContrast"
+            @mouseup="generateImage"
           />
           <span class="max-value">100</span>
-          <span class="current-value">{{ brightness }}</span>
         </div>
         <div class="slider-bar">
-          <label for="contrast">对比度</label>
+          <label for="contrast">对比度:{{ contrast }}</label>
           <span class="min-value">-100</span>
           <input
             type="range"
@@ -39,12 +39,12 @@
             max="100"
             v-model.number="contrast"
             @input="adjustBrightnessContrast"
+            @mouseup="generateImage"
           />
           <span class="max-value">100</span>
-          <span class="current-value">{{ contrast }}</span>
         </div>
         <div class="slider-bar">
-          <label for="saturation">饱和度</label>
+          <label for="saturation">饱和度:{{ saturation }}</label>
           <span class="min-value">-100</span>
           <input
             type="range"
@@ -53,12 +53,12 @@
             max="100"
             v-model.number="saturation"
             @input="adjustSaturation"
+            @mouseup="generateImage"
           />
           <span class="max-value">100</span>
-          <span class="current-value">{{ saturation }}</span>
         </div>
         <div class="slider-bar">
-          <label for="sharpening">锐化</label>
+          <label for="sharpening">锐化:{{ sharpening }}</label>
           <span class="min-value">-100</span>
           <input
             type="range"
@@ -67,14 +67,24 @@
             max="100"
             v-model.number="sharpening"
             @input="adjustSharpening"
+            @mouseup="generateImage"
           />
           <span class="max-value">100</span>
-          <span class="current-value">{{ sharpening }}</span>
         </div>
-        <!-- <div class="adjustments-confirm-buttons">
-          <button @click="confirmAdjustments">√</button>
-          <button @click="cancelAdjustments">×</button>
-        </div> -->
+        <div class="slider-bar">
+          <label for="blurRange">模糊: {{ blurStrength }}</label>
+          <span class="min-value">0</span>
+          <input
+            type="range"
+            id="blurRange"
+            min="0"
+            max="100"
+            v-model.number="blurStrength"
+            @input="applyBlur"
+            @mouseup="generateImage"
+          />
+          <span class="max-value">100</span>
+        </div>
       </div>
       <!-- 中间图片显示区域 -->
       <div class="image-container">
@@ -122,48 +132,7 @@
           <button @click="enableCropMode">裁切</button>
           <button @click="rotateImage">旋转</button>
           <!-- <button>去噪</button> -->
-          <button @click="applyBlur">模糊</button>
-          <div class="blur">
-            <label for="blurRange">Blur Strength: {{ blurStrength }}</label>
-            <input
-              type="range"
-              id="blurRange"
-              min="0"
-              max="100"
-              v-model="blurStrength"
-              @input="applyBlur"
-            />
-          </div>
         </div>
-        <!-- 图像调整工具 -->
-        <!-- <div class="tool-section">
-          <h3>图像调整</h3>
-          <button @click="selectAdjustment('brightness')">亮度</button>
-          <button @click="selectAdjustment('contrast')">对比度</button>
-          <button @click="selectAdjustment('saturation')">饱和度</button>
-          <button @click="selectAdjustment('sharpening')">锐化</button> -->
-
-        <!-- 动态显示滑动条 -->
-        <!-- <div v-if="selectedAdjustment" class="slider-bar">
-            <label :for="selectedAdjustment">{{ adjustmentLabel }}</label>
-            <span class="min-value">-100</span>
-            <input
-              type="range"
-              :id="selectedAdjustment"
-              min="-100"
-              max="100"
-              v-model="currentValue"
-              @input="applyAdjustment"
-            />
-            <span class="max-value">100</span>
-            <span class="current-value">{{ currentValue }}</span>
-          </div>
-        </div>
-
-        <div class="adjustments-confirm-buttons">
-          <button @click="confirmAdjustments">√</button>
-          <button @click="cancelAdjustments">×</button>
-        </div> -->
 
         <div class="tool-section">
           <h3>人像处理</h3>
@@ -198,22 +167,32 @@
           </select>
         </div>
 
-        <button id="generate">生成图片</button>
+        <button id="generate" @click="generateImage">生成图片</button>
       </div>
     </div>
   </div>
 </template>
 
 <script lang="ts">
-import { defineComponent, markRaw, ref, reactive, watch, onMounted, onUnmounted } from 'vue'
+import {
+  defineComponent,
+  markRaw,
+  ref,
+  reactive,
+  watch,
+  onMounted,
+  onUnmounted,
+  nextTick
+} from 'vue'
 import * as cv from '@techstark/opencv-js'
 import {
   applyGaussinBlur,
+  applyLaplacian,
   changeBrightnessAndContrast,
+  changeSaturation,
   fileToMat,
   styleTransfer
 } from './components/image_util'
-import { builtinModules } from 'module'
 
 export default defineComponent({
   name: 'ImageLoader',
@@ -225,8 +204,17 @@ export default defineComponent({
     const originalMat = ref<cv.Mat | null>(null) // 保存原图，用于重置
     const previewMat = ref<cv.Mat | null>(null) // 用于暂时预览
 
+    interface ImageState {
+      mat: cv.Mat
+      brightness: number
+      contrast: number
+      saturation: number
+      sharpening: number
+      blurStrength: number
+    }
     // 图像历史记录栈
-    const historyStack = ref<cv.Mat[]>([]) // 存储历史记录
+    const historyStack = ref<ImageState[]>([])
+
     const canUndo = ref<boolean>(false) // 是否可以撤销
 
     //图像旋转
@@ -253,7 +241,7 @@ export default defineComponent({
     const cropEnd = reactive({ x: 0, y: 0 })
 
     //高斯模糊
-    const blurStrength = ref<number>(10) // 初始模糊强度
+    const blurStrength = ref<number>(0) // 初始模糊强度
 
     //图像基础操作
     const handleFileChange = (event: Event) => {
@@ -264,23 +252,16 @@ export default defineComponent({
           .then((matResult) => {
             originalMat.value = markRaw(matResult.clone()) // 保存原图，用于重置
             mat.value = markRaw(matResult.clone())
+            previewMat.value = markRaw(matResult.clone())
             zoomValue.value = 1 // 重置缩放比例为1
             loadImage(mat.value, imageCanvas.value)
+            saveHistory()
           })
           .catch((error) => {
             console.error('Error loading image:', error)
           })
       }
     }
-
-    // const handleStyleChange = () => {
-    //   if (mat.value) {
-    //     styleTransfer(mat.value, 'candy').then((matResult) => {
-    //       mat.value = markRaw(matResult.clone())
-    //       loadImage(mat.value, imageCanvas.value)
-    //     })
-    //   }
-    // }
 
     //图像风格迁移
     const handleModelChange = (event: Event) => {
@@ -295,11 +276,11 @@ export default defineComponent({
         | 'udnie'
         | 'composition_vii'
       console.log('选择的风格是:', selectedStyle) // 打印选择的风格名称
-      if (mat.value) {
-        styleTransfer(mat.value, selectedStyle)
+      if (previewMat.value) {
+        styleTransfer(previewMat.value, selectedStyle)
           .then((matResult) => {
-            mat.value = markRaw(matResult.clone())
-            loadImage(mat.value, imageCanvas.value)
+            previewMat.value = markRaw(matResult.clone())
+            loadImage(previewMat.value, imageCanvas.value)
           })
           .catch((error) => {
             console.error('风格迁移出错:', error)
@@ -364,7 +345,11 @@ export default defineComponent({
       brightness.value = 0
       contrast.value = 0
       saturation.value = 0
+      sharpening.value = 0
       blurStrength.value = 0
+
+      historyStack.value = []
+
       // // 可能需要重置其他状态，如裁剪状态等
       // if (isCropping.value) {
       //   isCropping.value = false
@@ -385,29 +370,57 @@ export default defineComponent({
 
     // 保存历史记录
     const saveHistory = () => {
-      // if (mat.value) {
-      //   console.log('保存历史记录')
-      //   if (historyStack.value.length >= MAX_HISTORY_LENGTH) {
-      //     historyStack.value.shift() // 当超过最大历史记录数时，移除最早的记录
-      //   }
-      //   historyStack.value.push(mat.value.clone()) // 保存当前图像状态
-      //   canUndo.value = historyStack.value.length > 0 // 更新撤销按钮状态
-      // }
+      if (mat.value) {
+        console.log('保存历史记录')
+        if (historyStack.value.length >= MAX_HISTORY_LENGTH) {
+          historyStack.value.shift() // 当超过最大历史记录数时，移除最早的记录
+        }
+        historyStack.value.push({
+          mat: markRaw(mat.value.clone()),
+          brightness: brightness.value,
+          contrast: contrast.value,
+          saturation: saturation.value,
+          sharpening: sharpening.value,
+          blurStrength: blurStrength.value
+        }) // 保存当前图像和相关参数的状态
+        console.log(
+          'push',
+          brightness.value,
+          contrast.value,
+          saturation.value,
+          sharpening.value,
+          blurStrength.value
+        )
+        canUndo.value = historyStack.value.length > 0 // 更新撤销按钮状态
+      }
     }
 
     const undo = () => {
       if (historyStack.value.length > 0) {
         console.log('应用撤销', historyStack.value.length)
-        const previousMat = historyStack.value.pop() // 取出上一步的图像状态
-        if (previousMat && imageCanvas.value) {
+        const previousState = historyStack.value.pop() // 取出上一步的状态
+        if (previousState && imageCanvas.value) {
           console.log('准备更新当前图像状态', historyStack.value.length)
-          mat.value = markRaw(previousMat.clone()) // 更新当前图像状态
-          console.log('完成更新当前图像状态', historyStack.value.length)
-          cv.imshow(imageCanvas.value, mat.value) // 显示更新后的图像
-          drawImageCanvasOnMainCanvas() // 重新渲染图像
+          console.log('pop', previousState)
+          // 更新参数
+          mat.value = markRaw(previousState.mat.clone()) // 更新当前图像状态
+          brightness.value = previousState.brightness // 恢复亮度
+          contrast.value = previousState.contrast // 恢复对比度
+          saturation.value = previousState.saturation // 恢复饱和度
+          sharpening.value = previousState.sharpening // 恢复锐化
+          blurStrength.value = previousState.blurStrength //恢复模糊度
+
+          nextTick(() => {
+            if (imageCanvas.value && mat.value) {
+              cv.imshow(imageCanvas.value, mat.value) // 显示更新后的图像
+              drawImageCanvasOnMainCanvas()
+            }
+            console.log('完成更新当前图像状态', historyStack.value.length)
+          })
+
+          console.log('完成撤销', historyStack.value.length)
+          canUndo.value = historyStack.value.length > 0 // 更新撤销按钮状态
         }
-        console.log('完成撤销', historyStack.value.length)
-        canUndo.value = historyStack.value.length > 0 // 更新撤销按钮状态
       }
     }
 
@@ -452,15 +465,10 @@ export default defineComponent({
       canvasContainer.removeEventListener('mouseleave', endDrag)
     })
 
-    const confirmAdjustments = () => {
-      //TODO
-      return
-    }
     //图像旋转
     const rotateImage = () => {
       if (!mat.value || !imageCanvas.value) return
 
-      saveHistory() // 旋转前保存当前状态
       console.log('开始旋转')
       // 旋转图像
       const rotatedMat = new cv.Mat()
@@ -478,22 +486,35 @@ export default defineComponent({
     //图像色彩空间调整、
     const adjustBrightnessContrast = () => {
       console.log('进入亮度对比度调整')
-      if (originalMat.value) {
+      if (mat.value) {
         console.log('应用亮度对比度调整')
         console.log(typeof brightness.value, brightness.value)
         console.log(typeof contrast.value, contrast.value)
 
-        mat.value = markRaw(
-          changeBrightnessAndContrast(originalMat.value.clone(), brightness.value, contrast.value)
+        previewMat.value = markRaw(
+          changeBrightnessAndContrast(mat.value.clone(), brightness.value, contrast.value)
         )
-        loadImage(mat.value, imageCanvas.value)
+        loadImage(previewMat.value, imageCanvas.value)
         console.log('完成亮度对比度调整')
       }
     }
     const adjustSaturation = () => {
-      return
+      console.log('进入饱和度调整')
+      if (mat.value) {
+        console.log('开始应用饱和度调整')
+        previewMat.value = markRaw(changeSaturation(mat.value, saturation.value))
+        loadImage(previewMat.value, imageCanvas.value)
+        console.log('完成饱和度调整')
+      }
     }
     const adjustSharpening = () => {
+      console.log('进入锐化调整')
+      if (mat.value) {
+        console.log('开始锐化调整')
+        previewMat.value = markRaw(applyLaplacian(mat.value, sharpening.value))
+        loadImage(previewMat.value, imageCanvas.value)
+        console.log('完成锐化调整')
+      }
       return
     }
     //图像裁剪（已弃用）
@@ -603,13 +624,21 @@ export default defineComponent({
     watch(zoomValue, () => {
       drawImageCanvasOnMainCanvas()
     })
+
     //高斯模糊
     const applyBlur = () => {
       if (mat.value) {
-        // saveHistory() // 在应用模糊之前保存当前状态
         console.log('应用高斯模糊')
         previewMat.value = markRaw(applyGaussinBlur(mat.value.clone(), blurStrength.value))
         loadImage(previewMat.value, imageCanvas.value)
+      }
+    }
+
+    //生成图片
+    const generateImage = () => {
+      if (previewMat.value) {
+        saveHistory()
+        mat.value = previewMat.value
       }
     }
 
@@ -664,7 +693,10 @@ export default defineComponent({
       blurStrength,
 
       //风格迁移
-      handleModelChange
+      handleModelChange,
+
+      //生成图片
+      generateImage
     }
   }
 })
@@ -720,7 +752,7 @@ export default defineComponent({
   flex-direction: column;
   padding: 20px;
   margin-right: 20px; /* Ensure it does not touch the image container */
-  border-right: 2px solid #ccc; /* Visually separate from the image area */
+  border-right: 2px double #ccc; /* Visually separate from the image area */
   background-color: #f9f9f9; /* Light background for the sliders */
 }
 
@@ -737,8 +769,7 @@ export default defineComponent({
   font-size: 14px; /* Slightly larger font size for readability */
 }
 .min-value,
-.max-value,
-.current-value {
+.max-value {
   position: absolute;
   font-size: 12px;
 }
@@ -829,6 +860,7 @@ export default defineComponent({
   width: 50%;
   padding: 20px;
   background-color: #f9f9f9;
+  border-left: 2px double #ccc; /* Visually separate from the image area */
 }
 /*√*/
 .basic-tool-section {
