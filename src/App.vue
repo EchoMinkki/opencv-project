@@ -3,6 +3,7 @@
     <!-- 顶部横排 -->
     <div class="header">
       <div class="logo">
+        <img src="/page_icon.ico" alt="Logo" style="height: 40px; margin-right: 10px" />
         <span>图片处理与风格化系统</span>
       </div>
       <div class="actions">
@@ -109,7 +110,7 @@
         </div>
         <div class="image-actions">
           <input type="file" @change="handleFileChange" />
-          <button>下载图像</button>
+          <button @click="downloadImage">下载图像</button>
         </div>
         <div class="zoom-controls">
           <label for="zoom-slider">缩放比例：{{ zoomValue }}</label>
@@ -141,19 +142,44 @@
 
         <div class="tool-section">
           <h3>人像处理</h3>
-          <button>人脸识别</button>
-          <button>打马赛克</button>
-          <button>抠图</button>
-          <button>替换背景</button>
-          <button>情绪识别</button>
+          <button @click="openIDPhotoModal">制作证件照</button>
+          <button @click="applySmartMosaic">智能马赛克</button>
+          <button @click="() => $refs.fileInput.click()">背景替换</button>
+          <input
+            type="file"
+            ref="fileInput"
+            @change="handleBackgroundUpload"
+            style="display: none"
+          />
+
+          <!-- 证件照模态框 -->
+          <div v-if="showIDPhotoModal">
+            <p>请选择底色:</p>
+            <select v-model="selectedBackground">
+              <option v-for="bg in availableBackgrounds" :key="bg.value" :value="bg.value">
+                {{ bg.text }}
+              </option>
+            </select>
+            <button @click="createIDPhoto">确定</button>
+            <button @click="showIDPhotoModal = false">取消</button>
+          </div>
         </div>
 
         <div class="tool-section">
           <h3>滤镜</h3>
-          <button>素描滤镜</button>
-          <button>卡通滤镜</button>
-          <button>凸透镜滤镜</button>
-          <button>漩涡滤镜</button>
+          <label for="filterSelect">选择滤镜</label>
+          <select id="filterSelect" name="filter" @change="handleFilterChange">
+            <option value="edge">边缘</option>
+            <option value="blur">模糊</option>
+            <option value="sharp">锐化</option>
+            <option value="bifilter">双边滤波</option>
+            <option value="relief">浮雕</option>
+            <option value="sketch">素描</option>
+            <option value="nostalgia">怀旧</option>
+            <option value="stylization">风格化</option>
+            <option value="water">水彩</option>
+            <option value="gray">灰度</option>
+          </select>
         </div>
 
         <div class="tool-section">
@@ -197,7 +223,12 @@ import {
   changeSaturation,
   fileToMat,
   styleTransfer,
-  crop
+  crop,
+  replaceBackground,
+  matToBlob,
+  applyMosaic,
+  imageFilter,
+  removeBackgroundColor
 } from './components/image_util'
 
 export default defineComponent({
@@ -251,6 +282,28 @@ export default defineComponent({
 
     //高斯模糊
     const blurStrength = ref<number>(0) // 初始模糊强度
+
+    const showIDPhotoModal = ref<boolean>(false)
+    interface BackgroundOption {
+      text: string
+      value: string
+    }
+
+    const availableBackgrounds: BackgroundOption[] = [
+      { text: '白底', value: 'white' },
+      { text: '蓝底', value: 'blue' },
+      { text: '红底', value: 'red' }
+    ]
+
+    type BackgroundColor = 'blue' | 'red' | 'white'
+
+    const selectedBackground = ref<BackgroundColor>('white') // 默认值为 'white'
+
+    // 示例：输出第一个背景选项的文本和值
+    console.log(availableBackgrounds[0].text) // 输出: 白底
+    console.log(availableBackgrounds[0].value) // 输出: white
+
+    const newBackgroundImage = ref<string | null>(null)
 
     //图像基础操作
     const handleFileChange = (event: Event) => {
@@ -696,6 +749,104 @@ export default defineComponent({
       }
     }
 
+    //
+    const openIDPhotoModal = (): void => {
+      showIDPhotoModal.value = true
+    }
+
+    const createIDPhoto = async (): Promise<void> => {
+      if (!mat.value) return
+      try {
+        console.log('开始制作证件照')
+        previewMat.value = markRaw(
+          await removeBackgroundColor(markRaw(mat.value), selectedBackground.value)
+        )
+        loadImage(previewMat.value, imageCanvas.value)
+        console.log('制作证件照成功')
+      } catch (error) {
+        console.error('制作证件照时发生错误:', error)
+      }
+    }
+
+    const handleBackgroundUpload = (event: Event): void => {
+      const files = (event.target as HTMLInputElement).files
+      if (files) {
+        fileToMat(files[0])
+          .then((matResult) => {
+            const backgroundMat = markRaw(matResult.clone()) // 保存原图，用于重置
+            if (previewMat.value) {
+              replaceBackground(previewMat.value, backgroundMat).then((matResult) => {
+                previewMat.value = markRaw(matResult)
+                loadImage(previewMat.value, imageCanvas.value)
+              })
+              console.log('替换背景成功')
+            }
+          })
+          .catch((error) => {
+            console.error('Error loading image:', error)
+          })
+      }
+    }
+
+    //智能马赛克
+    const applySmartMosaic = async (): Promise<void> => {
+      if (!mat.value) return
+      try {
+        console.log('智能马赛克')
+        previewMat.value = markRaw(await applyMosaic(mat.value))
+        loadImage(previewMat.value, imageCanvas.value)
+      } catch (error) {
+        console.error('智能马赛克时发生错误:', error)
+      }
+    }
+
+    const handleFilterChange = (event: Event) => {
+      const selectedFilter = (event.target as HTMLSelectElement).value as
+        | 'edge'
+        | 'blur'
+        | 'sharp'
+        | 'bifilter'
+        | 'relief'
+        | 'sketch'
+        | 'nostalgia'
+        | 'stylization'
+        | 'water'
+        | 'gray'
+      console.log('选择的滤镜是:', selectedFilter) // 打印选择的风格名称
+      if (previewMat.value) {
+        imageFilter(previewMat.value, selectedFilter)
+          .then((matResult) => {
+            previewMat.value = markRaw(matResult.clone())
+            loadImage(previewMat.value, imageCanvas.value)
+          })
+          .catch((error) => {
+            console.error('滤镜出错:', error)
+          })
+      }
+    }
+
+    const downloadImage = async (): Promise<void> => {
+      if (!mat.value) {
+        console.error('没有图像可下载')
+        return
+      }
+
+      try {
+        console.log('下载图像')
+        const blob = await matToBlob(mat.value)
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'downloadedImage.png' // 指定下载的文件名
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      } catch (error) {
+        console.error('下载图像时发生错误:', error)
+      }
+    }
+
     return {
       //基础数据
       mainCanvas, //1
@@ -746,6 +897,9 @@ export default defineComponent({
       applyBlur,
       blurStrength,
 
+      //滤镜
+      handleFilterChange,
+
       //风格迁移
       handleModelChange,
 
@@ -754,25 +908,74 @@ export default defineComponent({
       toggleTheme,
 
       //生成图片
-      generateImage
+      generateImage,
+
+      //人像处理
+      showIDPhotoModal,
+      selectedBackground,
+      availableBackgrounds,
+      newBackgroundImage,
+      openIDPhotoModal,
+      createIDPhoto,
+      handleBackgroundUpload,
+      applySmartMosaic,
+
+      //下载图像
+      downloadImage
     }
   }
 })
 </script>
 
 <style scoped>
-/* 滑块样式 */
+/* 主体容器 */
+.editor-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: #e0e0e0;
+}
+
+/* 顶部导航栏 */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #37474f; /* 柔和的深灰蓝色 */
+  box-shadow: 0 6px 10px rgba(0, 0, 0, 0.15);
+  color: rgb(218, 214, 214);
+  padding: 10px 20px;
+}
+
+.logo img {
+  height: 40px;
+  margin-right: 10px;
+}
+
+.actions button {
+  background-color: #546e7a; /* 柔和的灰蓝色 */
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  margin-left: 8px;
+  margin-right:12px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition:
+    background-color 0.3s,
+    transform 0.2s; /* 添加变形动画 */
+}
+
+.actions button:hover {
+  background-color: #2c3e50;
+  transform: translateY(-2px); /* 悬停时轻微上移 */
+}
+
 .switch {
   position: relative;
   display: inline-block;
   width: 40px;
   height: 20px;
-}
-
-.switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
 }
 
 .slider {
@@ -782,7 +985,7 @@ export default defineComponent({
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #ccc;
+  background-color: #bdc3c7; /* 淡灰色背景 */
   transition: 0.4s;
   border-radius: 20px;
 }
@@ -800,83 +1003,53 @@ export default defineComponent({
 }
 
 input:checked + .slider {
-  background-color: #2196f3;
+  background-color: #3498db; /* 亮蓝色表示开启状态 */
 }
 
 input:checked + .slider:before {
   transform: translateX(20px);
 }
 
-/* 夜间模式样式 */
 body.night-mode {
-  background-color: #121212;
-  color: #ffffff;
+  background-color: #34495e; /* 深蓝灰色背景 */
+  color: #ecf0f1; /* 淡灰色文字提高对比 */
 }
 
 body.night-mode .header {
-  background-color: #1f1f1f;
+  background-color: #2c3e50;
 }
 
 body.night-mode .editor-container,
-body.night-mode .main-content {
-  background-color: #2e2e2e;
-  border-color: #444;
-  color: #f4f4f4;
-}
-
+body.night-mode .main-content,
 body.night-mode .slider-container,
-body.night-mode .tools-container,
-body.night-mode .image-container {
-  background-color: #494848;
-  border-color: #999898;
-  color: #f4f4f4;
+body.night-mode .image-container,
+body.night-mode .tools-container {
+  background-color: #2c3e50; /* 暗色背景适合夜间模式 */
+  color: #ecf0f1; /* 确保文字颜色亦适应夜间模式 */
+}
+body.night-mode .tools-container h3{
+  color: #ecf0f1
+}
+body.night-mode .actions button {
+  background-color: #3d566e; /* 深灰蓝色 */
 }
 
-body.night-mode .actions button,
-body.night-mode .tool-section button {
-  background-color: #444;
-  color: #f4f4f4;
+body.night-mode .tool-section,
+body.night-mode .image-box {
+  background-color: #37474f; /* 暗色背景提供更好的夜间视觉效果 */
+  border-color: #2c3e50; /* 调整边框颜色以符合夜间模式 */
 }
 
-body.night-mode label {
-  color: #f4f4f4;
-}
-.editor-container {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
+body.night-mode .image-actions button,
+body.night-mode .zoom-controls button,
+body.night-mode #generate {
+  background-color: #546e7a; /* 暗色按钮背景 */
 }
 
-/*√*/
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background-color: #333;
-  color: white;
-  padding: 10px;
-}
-
-/*√*/
-.logo {
-  display: flex;
-  align-items: center;
-}
-
-/*√*/
-.logo img {
-  height: 40px;
-  margin-right: 10px;
-}
-
-/*√*/
-.actions button {
-  background-color: #666;
-  color: white;
-  border: none;
-  padding: 8px 12px;
-  margin-left: 10px;
-  cursor: pointer;
+body.night-mode .image-actions button:hover,
+body.night-mode .zoom-controls button:hover,
+body.night-mode #generate:hover {
+  background-color: #455a64; /* 悬停时的按钮背景颜色 */
 }
 
 .main-content {
@@ -884,64 +1057,23 @@ body.night-mode label {
   margin-top: 20px;
 }
 
-/* Slider container styles */
 .slider-container {
   display: flex;
   flex-direction: column;
   padding: 20px;
-
-  border-right: 2px solid #ccc; /* Visually separate from the image area */
-  background-color: #f9f9f9; /* Light background for the sliders */
-}
-
-/* Individual slider bar styles */
-.slider-bar {
-  margin-bottom: 20px; /* Space out individual sliders */
-  position: relative;
+  border-right: 2px solid #bdc3c7; /* 更淡的分隔线 */
+  background-color: #ecf0f1; /* 淡灰色背景 */
 }
 
 .slider-bar label {
-  display: block; /* Make the label take the full width */
-  margin-bottom: 5px; /* Space between the label and the slider */
-  color: #333; /* Dark color for text for better readability */
-  font-size: 14px; /* Slightly larger font size for readability */
-}
-.min-value,
-.max-value {
-  position: absolute;
-  font-size: 12px;
-}
-
-.min-value {
-  left: 0;
-  top: 20px;
-}
-
-.max-value {
-  right: 0;
-  top: 20px;
-}
-
-.current-value {
-  left: 50%;
-  top: 3px;
-  transform: translateX(-50%);
+  display: block;
+  margin-bottom: 5px;
+  color: #7f8c8d; /* 淡灰色文字 */
+  font-size: 14px;
 }
 
 .slider-bar input[type='range'] {
-  width: 100%; /* Full width sliders */
-  cursor: pointer; /* Pointer cursor on hover */
-}
-
-.adjustments-confirm-buttons {
-  text-align: center;
-  color: white;
-  border: none;
-  padding: 8px 12px;
-  margin-left: 10px;
-}
-.adjustments-confirm-buttons button {
-  margin-right: 10px;
+  width: 100%;
   cursor: pointer;
 }
 
@@ -950,115 +1082,133 @@ body.night-mode label {
   padding: 20px;
   display: flex;
   flex-direction: column;
+  background-color: #ecf0f1; /* 统一背景色 */
 }
 
-/*√*/
+.tools-container {
+  width: 50%;
+  padding: 20px;
+  background-color: #ecf0f1; /* 统一背景色 */
+  border-left: 2px double #bdc3c7;
+}
+
+.tool-section {
+  background-color: #f8f9fa;
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin-bottom: 10px;
+}
+
+.tool-section select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background-color: white;
+  cursor: pointer;
+}
+
 .image-box {
   width: 100%;
-  height: 400px; /* 定义固定高度 */
-  border: 1px solid #ccc;
+  height: 400px;
+  border: 1px solid #bdc3c7; /* 更细腻的边框颜色 */
   display: flex;
   justify-content: center;
   align-items: center;
-  background-color: #f4f4f4;
+  background-color: #ecf0f1; /* 统一背景色 */
   overflow: hidden;
   position: relative;
 }
-/*√*/
+
 .image-box img {
   max-width: 100%;
   max-height: 100%;
   transition: transform 0.2s ease;
 }
-/*√*/
-.image-actions,
-.zoom-controls {
-  margin-top: 10px;
-}
-/*√*/
+
 .image-actions button,
 .zoom-controls button {
-  background-color: #00a4ff;
+  background-color: #3498db; /* 更明亮的蓝色 */
   color: white;
   border: none;
   padding: 8px;
   margin-right: 10px;
   cursor: pointer;
+  transition:
+    background-color 0.2s,
+    transform 0.2s;
 }
-/*√*/
+
+.image-actions button:hover,
+.zoom-controls button:hover {
+  background-color: #2980b9; /* 按钮悬停时颜色加深 */
+  transform: translateY(-2px); /* 按钮悬停时轻微上移 */
+}
+
 .zoom-controls {
   width: 200px;
 }
+
 .zoom-controls input {
-  width: 200px;
+  width: 100%;
 }
 
-/*√*/
-.tools-container {
-  width: 50%;
-  padding: 20px;
-  background-color: #f9f9f9;
-  border-left: 2px double #ccc; /* Visually separate from the image area */
-}
-/*√*/
-.basic-tool-section {
-  margin-bottom: 20px;
-}
-/*√*/
+.basic-tool-section,
 .tool-section {
   margin-bottom: 20px;
 }
-/*√*/
+
 .tool-section h3 {
   font-size: 1.2em;
+  color: #2c3e50; /* 深蓝色文字提供更现代的感觉 */
   margin-bottom: 10px;
 }
-/*√*/
+
 .tool-section button {
-  background-color: #555;
+  background-color: #34495e; /* 深灰蓝色按钮 */
   color: white;
   border: none;
   padding: 8px;
   margin-right: 5px;
   cursor: pointer;
+  transition:
+    background-color 0.3s,
+    transform 0.2s;
 }
-/*√*/
+
+.tool-section button:hover {
+  background-color: #2c3e50;
+  transform: translateY(-2px);
+}
+
 button {
   border-radius: 10px;
 }
-/*.crop-box {
-  border: 2px dashed #00f;
-  position: absolute;
-}
 
-.crop-controls {
-  position: absolute;
-  bottom: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.crop-controls button {
-  margin: 0 10px;
-  font-size: 24px;
-}*/
 #generate {
-  background-color: #28a745;
+  background-color: #27ae60; /* 更鲜明的绿色 */
   color: white;
   padding: 10px;
   width: 100%;
   border: none;
   cursor: pointer;
+  transition:
+    background-color 0.3s,
+    transform 0.2s;
 }
 
-/*√*/
+#generate:hover {
+  background-color: #2ecc71; /* 按钮悬停时颜色变亮 */
+  transform: translateY(-2px);
+}
+
 .canvas-container {
   position: relative;
-  width: 100%; /* Adjust based on your layout */
-  height: 100%; /* Adjust based on your layout */
+  width: 100%; /* 调整基于布局 */
+  height: 100%; /* 调整基于布局 */
 }
 
-/*√*/
 canvas {
   position: absolute;
   top: 0;
@@ -1070,5 +1220,24 @@ canvas {
 input[type='range'] {
   width: 300px;
   margin-top: 10px;
+}
+
+@media (max-width: 768px) {
+  .header,
+  .actions button {
+    padding: 5px 10px;
+    font-size: 14px;
+  }
+
+  .main-content,
+  .image-container,
+  .tools-container {
+    flex-direction: column;
+  }
+
+  .image-container,
+  .tools-container {
+    width: 100%;
+  }
 }
 </style>

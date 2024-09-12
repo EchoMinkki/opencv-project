@@ -64,22 +64,6 @@ export function applyUnsharpMask(pic: cv.Mat, strength: number): cv.Mat {
   return result
 }
 
-async function fetchImage(uri: string, pic: cv.Mat): Promise<cv.Mat> {
-  const formData = new FormData()
-  const picBlob = await matToBlob(pic)
-  formData.append('file', picBlob)
-
-  const response = await fetch(url + uri, { method: 'POST', body: formData })
-  if (!response.ok) {
-    throw new Error('Network response was not ok')
-  }
-  const data = await response.json()
-  if (!data.image) {
-    throw new Error('json have no image')
-  }
-  return base64ToMat(data.image)
-}
-
 export function changeBrightnessAndContrast(
   pic: cv.Mat,
   brightness: number,
@@ -142,7 +126,7 @@ export function crop(
   return pic.roi(rect).clone()
 }
 
-async function matToBlob(pic: cv.Mat): Promise<Blob> {
+export async function matToBlob(pic: cv.Mat): Promise<Blob> {
   const picData: cv.ImageData = {
     data: new Uint8ClampedArray(pic.data),
     width: pic.cols,
@@ -184,4 +168,63 @@ export async function styleTransfer(
     | 'composition_vii'
 ) {
   return fetchImage('style_transfer/?model_name=' + model_name, pic)
+}
+
+export async function replaceBackground(pic: cv.Mat, background: cv.Mat) {
+  return fetchImage('replace_background/', pic, background)
+}
+
+/**
+ * 调用滤镜函数的异步接口
+ * @param pic cv.Mat类型的图片输入
+ * @param filter 传递给接口的参数，决定了使用的滤镜，可选值为
+ * 'edge', 'blur', 'sharp', 'bifilter', 'relief', 'sketch', 'nostalgia', 'stylization','water', 'gray'
+ */
+export async function imageFilter(
+  pic: cv.Mat,
+  filter:
+    | 'edge'
+    | 'blur'
+    | 'sharp'
+    | 'bifilter'
+    | 'relief'
+    | 'sketch'
+    | 'nostalgia'
+    | 'stylization'
+    | 'water'
+    | 'gray'
+): Promise<cv.Mat> {
+  return fetchImage('imagefilter/?model_name=' + filter, pic)
+}
+
+export async function applyMosaic(pic: cv.Mat): Promise<cv.Mat> {
+  return fetchImage('apply_mosaic/', pic)
+}
+
+export async function removeBackgroundColor(
+  pic: cv.Mat,
+  color: 'blue' | 'red' | 'white'
+): Promise<cv.Mat> {
+  return fetchImage('replace_background_with_color/?color=' + color, pic)
+}
+
+async function fetchImage(uri: string, pic: cv.Mat, background?: cv.Mat): Promise<cv.Mat> {
+  const formData = new FormData()
+  const picBlob = await matToBlob(pic)
+  formData.append('file', picBlob)
+  if (background) {
+    const backgroundBlob = await matToBlob(background)
+    formData.append('background', backgroundBlob)
+  }
+
+  const response = await fetch(url + uri, { method: 'POST', body: formData })
+  if (!response.ok) {
+    const information = await response.text()
+    throw new Error(information)
+  }
+  const data = await response.json()
+  if (!data.image) {
+    throw new Error('json have no image')
+  }
+  return base64ToMat(data.image)
 }
