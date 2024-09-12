@@ -42,20 +42,25 @@ export function applyGaussinBlur(pic: cv.Mat, strength: number): cv.Mat {
   return result
 }
 
-export function applyLaplacian(pic: cv.Mat, strength: number): cv.Mat {
+export function applyUnsharpMask(pic: cv.Mat, strength: number): cv.Mat {
   const alpha = strength / 100
 
+  // Apply Gaussian Blur to create a blurred version of the image
+  const blurred = new cv.Mat()
+  cv.GaussianBlur(pic, blurred, new cv.Size(9, 9), 0)
+
+  // Create the unsharp mask by subtracting the blurred image from the original
+  const mask = new cv.Mat()
+  cv.subtract(pic, blurred, mask)
+
+  // Add the mask back to the original image to enhance the edges
   const result = new cv.Mat()
-  cv.Laplacian(pic, result, cv.CV_16S)
+  cv.addWeighted(pic, 1, mask, alpha, 0, result)
 
-  const absResult = new cv.Mat()
-  cv.convertScaleAbs(result, absResult)
+  // Clean up
+  blurred.delete()
+  mask.delete()
 
-  // 使用加权和函数来锐化图像
-  // alpha: 控制锐化强度，0.5 为原始强度，增大值会增加锐化效果
-  cv.addWeighted(pic, 1 + alpha, absResult, -alpha, 0, result)
-
-  absResult.delete()
   return result
 }
 
@@ -89,15 +94,15 @@ export function changeBrightnessAndContrast(
 }
 
 export function changeSaturation(pic: cv.Mat, saturation: number) {
-  let hsv = new cv.Mat()
+  const hsv = new cv.Mat()
   cv.cvtColor(pic, hsv, cv.COLOR_RGB2HSV)
 
   // 2. 拆分 HSV 通道
-  let hsvChannels = new cv.MatVector()
+  const hsvChannels = new cv.MatVector()
   cv.split(hsv, hsvChannels)
 
   // 3. 调整饱和度 (S 通道)
-  let saturationChannel = hsvChannels.get(1) // S 通道 (饱和度通道)
+  const saturationChannel = hsvChannels.get(1) // S 通道 (饱和度通道)
 
   // 将饱和度按比例放大或缩小，范围从 -100 到 100
   const scaleFactor = (saturation + 100) / 100 // 将 -100 到 100 映射为 0 到 2
@@ -112,7 +117,7 @@ export function changeSaturation(pic: cv.Mat, saturation: number) {
   cv.merge(hsvChannels, hsv)
 
   // 6. 转换回 RGB 颜色空间
-  let dst = new cv.Mat()
+  const dst = new cv.Mat()
   cv.cvtColor(hsv, dst, cv.COLOR_HSV2RGB)
 
   // 释放内存

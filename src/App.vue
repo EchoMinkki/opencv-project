@@ -8,6 +8,11 @@
       <div class="actions">
         <button @click="reset">重置</button>
         <button @click="undo" :disabled="!canUndo">撤销</button>
+        <!-- 添加主题切换滑块 -->
+        <label class="switch">
+          <input type="checkbox" v-model="isNightMode" @change="toggleTheme" />
+          <span class="slider"></span>
+        </label>
       </div>
     </div>
 
@@ -59,11 +64,11 @@
         </div>
         <div class="slider-bar">
           <label for="sharpening">锐化:{{ sharpening }}</label>
-          <span class="min-value">-100</span>
+          <span class="min-value">0</span>
           <input
             type="range"
             id="sharpening"
-            min="-100"
+            min="0"
             max="100"
             v-model.number="sharpening"
             @input="adjustSharpening"
@@ -187,7 +192,7 @@ import {
 import * as cv from '@techstark/opencv-js'
 import {
   applyGaussinBlur,
-  applyLaplacian,
+  applyUnsharpMask,
   changeBrightnessAndContrast,
   changeSaturation,
   fileToMat,
@@ -204,6 +209,8 @@ export default defineComponent({
     const mat = ref<cv.Mat | null>(null) //当前状态
     const originalMat = ref<cv.Mat | null>(null) // 保存原图，用于重置
     const previewMat = ref<cv.Mat | null>(null) // 用于暂时预览
+
+    const isNightMode = ref<boolean>(false)
 
     interface ImageState {
       mat: cv.Mat
@@ -513,7 +520,7 @@ export default defineComponent({
       console.log('进入锐化调整')
       if (mat.value) {
         console.log('开始锐化调整')
-        previewMat.value = markRaw(applyLaplacian(mat.value, sharpening.value))
+        previewMat.value = markRaw(applyUnsharpMask(mat.value, sharpening.value))
         loadImage(previewMat.value, imageCanvas.value)
         console.log('完成锐化调整')
       }
@@ -585,42 +592,51 @@ export default defineComponent({
 
     const startCrop = (event: MouseEvent) => {
       if (isCropping.value && overlayCanvas.value) {
-        const rect = overlayCanvas.value.getBoundingClientRect()
-        cropStart.x = event.clientX - rect.left
-        cropStart.y = event.clientY - rect.top
+        const coords = getCanvasCoordinates(event, overlayCanvas.value)
+        cropStart.x = coords.x
+        cropStart.y = coords.y
         cropEnd.x = cropStart.x
         cropEnd.y = cropStart.y
-        console.log('开始图片裁切')
         isDrawing.value = true
       }
     }
 
     const drawCrop = (event: MouseEvent) => {
       if (isCropping.value && overlayCanvas.value) {
-        const rect = overlayCanvas.value.getBoundingClientRect()
-        console.log(event.clientX, event.clientY, rect)
-        cropEnd.x = event.clientX - rect.left
-        cropEnd.y = event.clientY - rect.top
+        const coords = getCanvasCoordinates(event, overlayCanvas.value)
+        cropEnd.x = coords.x
+        cropEnd.y = coords.y
 
         const ctx = overlayCanvas.value.getContext('2d')
         if (ctx && isDrawing.value) {
           ctx.clearRect(0, 0, overlayCanvas.value.width, overlayCanvas.value.height)
           ctx.strokeStyle = 'red'
           ctx.lineWidth = 2
-          console.log(cropStart.x, cropStart.y, cropEnd.x - cropStart.x, cropEnd.y - cropStart.y)
           ctx.strokeRect(cropStart.x, cropStart.y, cropEnd.x - cropStart.x, cropEnd.y - cropStart.y)
-          //ctx.strokeRect(0, 88, 100, 100)
-          console.log('绘制裁剪矩形框')
         }
       }
     }
 
     const endCrop = () => {
-      if (isCropping.value && mat.value) {
+      if (isCropping.value && mat.value && imageCanvas.value && mainCanvas.value) {
         isDrawing.value = false
         // 生成裁剪预览图
+        const scale = baseScale.value * zoomValue.value
+        const scaledWidth = imageCanvas.value.width * scale
+        const scaledHeight = imageCanvas.value.height * scale
+
+        const x = (mainCanvas.value.width - scaledWidth) / 2 + imagePosition.x
+        const y = (mainCanvas.value.height - scaledHeight) / 2 + imagePosition.y
+
+        const transform = (point: { x: number; y: number }) => {
+          return {
+            x: (point.x - x) / scale,
+            y: (point.y - y) / scale
+          }
+        }
+
         console.log('开始调用crop函数', cropStart, cropEnd)
-        previewMat.value = markRaw(crop(mat.value, cropStart, cropEnd))
+        previewMat.value = markRaw(crop(mat.value, transform(cropStart), transform(cropEnd)))
         console.log('完成调用crop函数')
         if (previewMat.value && imageCanvas.value) {
           console.log('imshow前')
@@ -668,6 +684,15 @@ export default defineComponent({
       if (previewMat.value) {
         saveHistory()
         mat.value = previewMat.value
+      }
+    }
+
+    //主题切换
+    const toggleTheme = () => {
+      if (isNightMode.value) {
+        document.body.classList.add('night-mode')
+      } else {
+        document.body.classList.remove('night-mode')
       }
     }
 
@@ -724,6 +749,10 @@ export default defineComponent({
       //风格迁移
       handleModelChange,
 
+      //主题切换
+      isNightMode,
+      toggleTheme,
+
       //生成图片
       generateImage
     }
@@ -732,6 +761,86 @@ export default defineComponent({
 </script>
 
 <style scoped>
+/* 滑块样式 */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 20px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: 0.4s;
+  border-radius: 20px;
+}
+
+.slider:before {
+  position: absolute;
+  content: '';
+  height: 16px;
+  width: 16px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  transition: 0.4s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #2196f3;
+}
+
+input:checked + .slider:before {
+  transform: translateX(20px);
+}
+
+/* 夜间模式样式 */
+body.night-mode {
+  background-color: #121212;
+  color: #ffffff;
+}
+
+body.night-mode .header {
+  background-color: #1f1f1f;
+}
+
+body.night-mode .editor-container,
+body.night-mode .main-content {
+  background-color: #2e2e2e;
+  border-color: #444;
+  color: #f4f4f4;
+}
+
+body.night-mode .slider-container,
+body.night-mode .tools-container,
+body.night-mode .image-container {
+  background-color: #494848;
+  border-color: #999898;
+  color: #f4f4f4;
+}
+
+body.night-mode .actions button,
+body.night-mode .tool-section button {
+  background-color: #444;
+  color: #f4f4f4;
+}
+
+body.night-mode label {
+  color: #f4f4f4;
+}
 .editor-container {
   width: 100%;
   display: flex;
@@ -780,8 +889,8 @@ export default defineComponent({
   display: flex;
   flex-direction: column;
   padding: 20px;
-  margin-right: 20px; /* Ensure it does not touch the image container */
-  border-right: 2px double #ccc; /* Visually separate from the image area */
+
+  border-right: 2px solid #ccc; /* Visually separate from the image area */
   background-color: #f9f9f9; /* Light background for the sliders */
 }
 
