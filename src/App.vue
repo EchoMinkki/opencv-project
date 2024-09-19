@@ -4,7 +4,7 @@
     <div class="header">
       <div class="logo">
         <img src="/page_icon.ico" alt="Logo" style="height: 40px; margin-right: 10px" />
-        <span>图片处理与风格化系统</span>
+        <span>PixelMorph —— 图片处理与风格化系统</span>
       </div>
       <div class="actions">
         <button @click="reset">重置</button>
@@ -176,8 +176,8 @@
             <option value="relief">浮雕</option>
             <option value="sketch">素描</option>
             <option value="nostalgia">怀旧</option>
-            <option value="stylization">风格化</option>
-            <option value="water">水彩</option>
+            <option value="stylization">漫画风</option>
+            <option value="water">涡轮</option>
             <option value="gray">灰度</option>
           </select>
         </div>
@@ -190,7 +190,7 @@
             <option value="starry_night">星夜</option>
             <option value="the_wave">巨浪</option>
             <option value="the_scream">呐喊</option>
-            <option value="mosaic">马赛克</option>
+            <option value="mosaic">水晶化</option>
             <option value="la_muse">缪斯女神</option>
             <option value="feathers">羽毛</option>
             <option value="udnie">尤德尼梦境</option>
@@ -423,6 +423,7 @@ export default defineComponent({
       if (originalMat.value) {
         if (!imageCanvas.value) return
         mat.value = markRaw(originalMat.value.clone())
+        previewMat.value = markRaw(originalMat.value.clone())
         cv.imshow(imageCanvas.value, mat.value)
         drawImageCanvasOnMainCanvas()
       }
@@ -758,6 +759,7 @@ export default defineComponent({
       if (!mat.value) return
       try {
         console.log('开始制作证件照')
+        showIDPhotoModal.value = false
         previewMat.value = markRaw(
           await removeBackgroundColor(markRaw(mat.value), selectedBackground.value)
         )
@@ -958,7 +960,7 @@ export default defineComponent({
   border: none;
   padding: 8px 16px;
   margin-left: 8px;
-  margin-right:12px;
+  margin-right: 12px;
   cursor: pointer;
   border-radius: 4px;
   transition:
@@ -1027,8 +1029,8 @@ body.night-mode .tools-container {
   background-color: #2c3e50; /* 暗色背景适合夜间模式 */
   color: #ecf0f1; /* 确保文字颜色亦适应夜间模式 */
 }
-body.night-mode .tools-container h3{
-  color: #ecf0f1
+body.night-mode .tools-container h3 {
+  color: #ecf0f1;
 }
 body.night-mode .actions button {
   background-color: #3d566e; /* 深灰蓝色 */
